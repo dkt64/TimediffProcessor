@@ -79,7 +79,7 @@ public class TimediffProcessor extends AbstractProcessor {
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor Signal_desc_timediff_val = new PropertyDescriptor.Builder()
             .name("signal_desc_timediff_val").displayName("Output timediff value descriptor")
-            .description("Timediff field in output json").required(true)
+            .description("Timediff field in output json").required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor First_signal_name = new PropertyDescriptor.Builder()
@@ -188,7 +188,7 @@ public class TimediffProcessor extends AbstractProcessor {
                             timestamp = time;
                         }
                         if (name.equals(prop_second_signal_name) && val == second_signal_val && timestamp != time
-                                && timestamp.compareTo(BigDecimal.ZERO) > 0) {
+                                && timestamp.compareTo(BigDecimal.ZERO) > 0 && time.compareTo(BigDecimal.ZERO) > 0) {
                             BigDecimal outval = time.subtract(timestamp);
                             if (outval.compareTo(BigDecimal.ZERO) > 0) {
 
@@ -201,8 +201,14 @@ public class TimediffProcessor extends AbstractProcessor {
                                             prop_first_signal_name + "(" + prop_first_signal_val + "),"
                                                     + prop_second_signal_name + "(" + prop_second_signal_val + ")");
                                 }
+
                                 newJson.put(prop_signal_desc_timestamp, time);
-                                newJson.put(prop_signal_desc_timediff_val, outval);
+
+                                if (prop_signal_desc_timediff_name != null && prop_signal_desc_timediff_name != "") {
+                                    newJson.put(prop_signal_desc_timediff_val, outval);
+                                } else {
+                                    newJson.put(prop_signal_desc_val, outval);
+                                }
 
                                 String outstring = newJson.toJson();
 
@@ -216,7 +222,7 @@ public class TimediffProcessor extends AbstractProcessor {
                     } else {
                         // 1 parametr
                         if (name.equals(prop_first_signal_name) && val == first_signal_val) {
-                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0) {
+                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0  && time.compareTo(BigDecimal.ZERO) > 0) {
                                 BigDecimal outval = time.subtract(timestamp);
                                 if (outval.compareTo(BigDecimal.ZERO) > 0) {
                                     final JsonObject newJson = new JsonObject();
@@ -228,7 +234,12 @@ public class TimediffProcessor extends AbstractProcessor {
                                                 prop_first_signal_name + "(" + prop_first_signal_val + ")");
                                     }
                                     newJson.put(prop_signal_desc_timestamp, time);
-                                    newJson.put(prop_signal_desc_timediff_val, outval);
+                                    if (prop_signal_desc_timediff_name != null
+                                            && prop_signal_desc_timediff_name != "") {
+                                        newJson.put(prop_signal_desc_timediff_val, outval);
+                                    } else {
+                                        newJson.put(prop_signal_desc_val, outval);
+                                    }
                                     String outstring = newJson.toJson();
                                     value.set(outstring);
                                 }
