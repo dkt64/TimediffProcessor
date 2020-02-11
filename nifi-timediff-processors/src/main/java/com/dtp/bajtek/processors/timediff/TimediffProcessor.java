@@ -204,7 +204,7 @@ public class TimediffProcessor extends AbstractProcessor {
 
                                 newJson.put(prop_signal_desc_timestamp, time);
 
-                                if (prop_signal_desc_timediff_name != null && prop_signal_desc_timediff_name != "") {
+                                if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
                                     newJson.put(prop_signal_desc_timediff_val, outval);
                                 } else {
                                     newJson.put(prop_signal_desc_val, outval);
@@ -234,8 +234,8 @@ public class TimediffProcessor extends AbstractProcessor {
                                                 prop_first_signal_name + "(" + prop_first_signal_val + ")");
                                     }
                                     newJson.put(prop_signal_desc_timestamp, time);
-                                    if (prop_signal_desc_timediff_name != null
-                                            && prop_signal_desc_timediff_name != "") {
+                                    if (prop_signal_desc_timediff_val != null
+                                            && prop_signal_desc_timediff_val != "") {
                                         newJson.put(prop_signal_desc_timediff_val, outval);
                                     } else {
                                         newJson.put(prop_signal_desc_val, outval);
