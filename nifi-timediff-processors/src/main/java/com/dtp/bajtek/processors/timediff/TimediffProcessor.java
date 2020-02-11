@@ -48,9 +48,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.*;
+import com.github.cliftonlabs.json_simple.JsonObject;
+import com.github.cliftonlabs.json_simple.Jsonable;
+import com.github.cliftonlabs.json_simple.Jsoner;
+import org.dozer.DozerBeanMapper;
+import org.dozer.Mapper;
 
 @Tags({ "json, timestamp, automation, calc, stream" })
 @CapabilityDescription("Calculate timestamp difference between PLC signals in a stream")
@@ -69,20 +73,24 @@ public class TimediffProcessor extends AbstractProcessor {
             .name("signal_desc_timestamp").displayName("Signal timestamp descriptor")
             .description("Timestamp field in json").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
+    public static final PropertyDescriptor Signal_desc_timediff = new PropertyDescriptor.Builder()
+            .name("signal_desc_timediff").displayName("Output timediff descriptor")
+            .description("Timediff field in output json").required(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor First_signal_name = new PropertyDescriptor.Builder()
             .name("first_signal_name").displayName("First signal name").description("Name of the first signal")
             .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor First_signal_val = new PropertyDescriptor.Builder().name("first_signal_val")
             .displayName("First signal value").description("Value of the first signal").required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR).build();
 
     public static final PropertyDescriptor Second_signal_name = new PropertyDescriptor.Builder()
             .name("second_signal_name").displayName("Second signal name").description("Name of the second signal")
-            .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .required(false).build();
     public static final PropertyDescriptor Second_signal_val = new PropertyDescriptor.Builder()
             .name("second_signal_val").displayName("Second signal value").description("Value of the second signal")
-            .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).build();
 
     public static final Relationship SUCCESS = new Relationship.Builder().name("success")
             .description("New flowfile in form of String with found/calculated time difference").build();
@@ -93,10 +101,7 @@ public class TimediffProcessor extends AbstractProcessor {
 
     private Set<Relationship> relationships;
 
-    public Long timestamp = 0L;
-    public Long time0 = 0L;
-    public Long time1 = 0L;
-    public Boolean calc = false;
+    public BigDecimal timestamp = new BigDecimal(0);
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -104,6 +109,7 @@ public class TimediffProcessor extends AbstractProcessor {
         descriptors.add(Signal_desc_name);
         descriptors.add(Signal_desc_val);
         descriptors.add(Signal_desc_timestamp);
+        descriptors.add(Signal_desc_timediff);
         descriptors.add(First_signal_name);
         descriptors.add(First_signal_val);
         descriptors.add(Second_signal_name);
@@ -145,6 +151,7 @@ public class TimediffProcessor extends AbstractProcessor {
         String prop_signal_desc_name = context.getProperty(Signal_desc_name).getValue();
         String prop_signal_desc_val = context.getProperty(Signal_desc_val).getValue();
         String prop_signal_desc_timestamp = context.getProperty(Signal_desc_timestamp).getValue();
+        String prop_signal_desc_timediff = context.getProperty(Signal_desc_timediff).getValue();
 
         String prop_first_signal_name = context.getProperty(First_signal_name).getValue();
         String prop_first_signal_val = context.getProperty(First_signal_val).getValue();
@@ -160,73 +167,57 @@ public class TimediffProcessor extends AbstractProcessor {
                 try {
 
                     String json = IOUtils.toString(in);
-                    Object obj = new JSONParser().parse(json);
-                    JSONObject parsedJson = (JSONObject) obj;
+
+                    // Object obj = new JSONParser().parse(json);
+                    JsonObject parsedJson = (JsonObject) Jsoner.deserialize(json);
 
                     String name = (String) parsedJson.get(prop_signal_desc_name);
                     Boolean val = (Boolean) parsedJson.get(prop_signal_desc_val);
-                    Long time = (Long) parsedJson.get(prop_signal_desc_timestamp);
+                    BigDecimal time = (BigDecimal) parsedJson.get(prop_signal_desc_timestamp);
 
-                    if (name.equals(prop_first_signal_name) && val == first_signal_val) {
-                        if (time != time0 && time1 != time) {
+                    // Sprawdzamy czy zdefiniowano drugi parametr
+                    if (prop_second_signal_name != null && prop_second_signal_name != "") {
+                        // 2 parametry
+                        if (name.equals(prop_first_signal_name) && val == first_signal_val) {
                             timestamp = time;
-                            calc = true;
                         }
-                        time1 = time;
-                    }
-                    if (name.equals(prop_second_signal_name) && val == second_signal_val) {
-                        if (time != time1 && time != time0 && calc) {
-                            Long outval = time - timestamp;
-                            if (outval > 0 && outval < 10000) { // DODAĆ PROPERITIES MIN I MAX !!!
-                                String outstring = "Timediff " + prop_second_signal_name + "[" + time + "] - "
-                                        + prop_first_signal_name + "[" + timestamp + "] = " + outval.toString();
+                        if (name.equals(prop_second_signal_name) && val == second_signal_val && timestamp != time
+                                && timestamp.compareTo(BigDecimal.ZERO) > 0) {
+                            BigDecimal outval = time.subtract(timestamp);
+                            if (outval.compareTo(BigDecimal.ZERO) > 0) {
+
+                                final JsonObject newJson = new JsonObject();
+                                newJson.put(prop_signal_desc_name,
+                                        prop_first_signal_name + "-" + prop_second_signal_name);
+                                newJson.put(prop_signal_desc_timestamp, time);
+                                newJson.put(prop_signal_desc_timediff, outval);
+
+                                String outstring = newJson.toJson();
+
+                                // String outstring = "Timediff " + prop_second_signal_name + "[" + time + "] -
+                                // "
+                                // + prop_first_signal_name + "[" + timestamp + "] = " + outval.toString();
+
                                 value.set(outstring);
                             }
                         }
-                        calc = false;
-                        time0 = time;
+                    } else {
+                        // 1 parametr
+                        if (name.equals(prop_first_signal_name) && val == first_signal_val) {
+                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0) {
+                                BigDecimal outval = time.subtract(timestamp);
+                                if (outval.compareTo(BigDecimal.ZERO) > 0) {
+                                    final JsonObject newJson = new JsonObject();
+                                    newJson.put(prop_signal_desc_name, prop_first_signal_name);
+                                    newJson.put(prop_signal_desc_timestamp, time);
+                                    newJson.put(prop_signal_desc_timediff, outval);
+                                    String outstring = newJson.toJson();
+                                    value.set(outstring);
+                                }
+                            }
+                            timestamp = time;
+                        }
                     }
-
-                    // String dane_in = name + " " + val + " " + time;
-                    // String outstring = json;
-
-                    // if (name.equals(prop_first_signal_name) && val == first_signal_val &&
-                    // timestamp == 0L) {
-                    // timestamp = time;
-                    // outstring += " *** 1 *** ";
-                    // }
-                    // if (name.equals(prop_second_signal_name) && val == second_signal_val) {
-                    // Long outval = time - timestamp;
-                    // outstring = "Timediff " + prop_second_signal_name + "[" + second_signal_val +
-                    // "] - "
-                    // + prop_first_signal_name + "[" + first_signal_val + "] = " +
-                    // outval.toString();
-                    // outstring += " *** 2 *** ";
-                    // timestamp = 0L;
-                    // }
-
-                    // value.set(dane_in + " " + outstring);
-
-                    // String json = IOUtils.toString(in);
-                    // value.set(json + " modified");
-
-                    // value.set("Signal [" + prop_signal_desc_name + "] " + name_id + ". Looking
-                    // for signals " + prop_first_signal_name + ", " + prop_second_signal_name);
-
-                    // if (name_id.equals(prop_first_signal_name)) {
-                    // value.set("Value " + val_id.toString() + " on signal " +
-                    // prop_first_signal_name + " detected. Looking for value " +
-                    // prop_first_signal_val.toString());
-                    // }
-                    // if (name_id.equals(prop_second_signal_name)) {
-                    // value.set("Value " + val_id.toString() + " on signal " +
-                    // prop_second_signal_name + " detected. Looking for value " +
-                    // prop_second_signal_val.toString());
-                    // }
-
-                    // value.set("Value " + val.toString() + " on signal " + name + " on time " +
-                    // time.toString() + " detected. Looking for " + prop_first_signal_name + "=" +
-                    // first_signal_val);
 
                 } catch (Exception ex) {
                     ex.printStackTrace();
