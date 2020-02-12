@@ -65,36 +65,39 @@ public class TimediffProcessor extends AbstractProcessor {
 
     public static final PropertyDescriptor Signal_desc_name = new PropertyDescriptor.Builder().name("signal_desc_name")
             .displayName("Signal name descriptor").description("Signal field in json").required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(true).build();
     public static final PropertyDescriptor Signal_desc_val = new PropertyDescriptor.Builder().name("signal_desc_val")
             .displayName("Signal value descriptor").description("Value field in json").required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(true).build();
     public static final PropertyDescriptor Signal_desc_timestamp = new PropertyDescriptor.Builder()
             .name("signal_desc_timestamp").displayName("Signal timestamp descriptor")
             .description("Timestamp field in json").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
+            .expressionLanguageSupported(true).build();
     public static final PropertyDescriptor Signal_desc_timediff_name = new PropertyDescriptor.Builder()
             .name("signal_desc_timediff_name").displayName("Output timediff name descriptor")
             .description("Timediff field in output json").required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(true).build();
     public static final PropertyDescriptor Signal_desc_timediff_val = new PropertyDescriptor.Builder()
             .name("signal_desc_timediff_val").displayName("Output timediff value descriptor")
-            .description("Timediff field in output json").required(false)
+            .description("Timediff field in output json").expressionLanguageSupported(true).required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor First_signal_name = new PropertyDescriptor.Builder()
             .name("first_signal_name").displayName("First signal name").description("Name of the first signal")
-            .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(true)
+            .build();
     public static final PropertyDescriptor First_signal_val = new PropertyDescriptor.Builder().name("first_signal_val")
             .displayName("First signal value").description("Value of the first signal").required(true)
-            .addValidator(StandardValidators.BOOLEAN_VALIDATOR).build();
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR).expressionLanguageSupported(true).build();
 
     public static final PropertyDescriptor Second_signal_name = new PropertyDescriptor.Builder()
             .name("second_signal_name").displayName("Second signal name").description("Name of the second signal")
-            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(true)
+            .build();
     public static final PropertyDescriptor Second_signal_val = new PropertyDescriptor.Builder()
             .name("second_signal_val").displayName("Second signal value").description("Value of the second signal")
-            .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).build();
+            .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).expressionLanguageSupported(true)
+            .build();
 
     public static final Relationship SUCCESS = new Relationship.Builder().name("success")
             .description("New flowfile in form of String with found/calculated time difference").build();
@@ -222,7 +225,8 @@ public class TimediffProcessor extends AbstractProcessor {
                     } else {
                         // 1 parametr
                         if (name.equals(prop_first_signal_name) && val == first_signal_val) {
-                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0  && time.compareTo(BigDecimal.ZERO) > 0) {
+                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0
+                                    && time.compareTo(BigDecimal.ZERO) > 0) {
                                 BigDecimal outval = time.subtract(timestamp);
                                 if (outval.compareTo(BigDecimal.ZERO) > 0) {
                                     final JsonObject newJson = new JsonObject();
@@ -234,8 +238,7 @@ public class TimediffProcessor extends AbstractProcessor {
                                                 prop_first_signal_name + "(" + prop_first_signal_val + ")");
                                     }
                                     newJson.put(prop_signal_desc_timestamp, time);
-                                    if (prop_signal_desc_timediff_val != null
-                                            && prop_signal_desc_timediff_val != "") {
+                                    if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
                                         newJson.put(prop_signal_desc_timediff_val, outval);
                                     } else {
                                         newJson.put(prop_signal_desc_val, outval);
