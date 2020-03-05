@@ -198,12 +198,14 @@ public class TimediffProcessor extends AbstractProcessor {
                     // Odczytanie pól z JSONa
                     //
                     String name = (String) parsedJson.get(prop_signal_desc_name);
-                    // Boolean val = (Boolean) parsedJson.get(prop_signal_desc_val);
+                    Boolean val = (Boolean) parsedJson.get(prop_signal_desc_val);
                     // BigDecimal time = (BigDecimal) parsedJson.get(prop_signal_desc_timestamp);
 
                     // Jeżeli są to interesujące nas sygnały to dodajemy do listy
                     //
-                    if (name.equals(prop_first_signal_name) || name.equals(prop_second_signal_name)) {
+                    if ((name.equals(prop_first_signal_name) && val.equals(first_signal_val))
+                            || (name.equals(prop_second_signal_name) && val.equals(second_signal_val))) {
+
                         // Dodanie do tablicy
                         //
                         messagesJsonArray.add(parsedJson);
