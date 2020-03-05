@@ -23,6 +23,7 @@ import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
+import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -38,6 +39,7 @@ import org.apache.nifi.processor.io.OutputStreamCallback;
 
 import org.apache.commons.io.IOUtils;
 
+import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -51,10 +53,7 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 
 import com.github.cliftonlabs.json_simple.JsonObject;
-// import com.github.cliftonlabs.json_simple.Jsonable;
 import com.github.cliftonlabs.json_simple.Jsoner;
-// import org.dozer.DozerBeanMapper;
-// import org.dozer.Mapper;
 
 @Tags({ "json, timestamp, automation, calc, stream" })
 @CapabilityDescription("Calculate timestamp difference between PLC signals in a stream")
@@ -99,6 +98,10 @@ public class TimediffProcessor extends AbstractProcessor {
             .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).expressionLanguageSupported(true)
             .build();
 
+    public static final PropertyDescriptor Buffer_size = new PropertyDescriptor.Builder().name("buffer_size")
+            .displayName("Buffer size").description("Buffer size").required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(false).build();
+
     public static final Relationship SUCCESS = new Relationship.Builder().name("success")
             .description("New flowfile in form of String with found/calculated time difference").build();
     public static final Relationship FAILURE = new Relationship.Builder().name("failure")
@@ -108,7 +111,7 @@ public class TimediffProcessor extends AbstractProcessor {
 
     private Set<Relationship> relationships;
 
-    public BigDecimal timestamp = new BigDecimal(0);
+    private List<JsonObject> messagesJsonArray = new ArrayList<JsonObject>();
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -122,6 +125,7 @@ public class TimediffProcessor extends AbstractProcessor {
         descriptors.add(First_signal_val);
         descriptors.add(Second_signal_name);
         descriptors.add(Second_signal_val);
+        descriptors.add(Buffer_size);
         this.descriptors = Collections.unmodifiableList(descriptors);
 
         final Set<Relationship> relationships = new HashSet<Relationship>();
@@ -143,6 +147,11 @@ public class TimediffProcessor extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) {
 
+    }
+
+    @OnStopped
+    public void onStopped(final ProcessContext context) {
+        messagesJsonArray.clear();
     }
 
     @Override
@@ -170,87 +179,165 @@ public class TimediffProcessor extends AbstractProcessor {
         String prop_second_signal_val = context.getProperty(Second_signal_val).getValue();
         Boolean second_signal_val = Boolean.parseBoolean(prop_second_signal_val);
 
+        String prop_buffer_size = context.getProperty(Buffer_size).getValue();
+        Integer buffer_size = Integer.parseInt(prop_buffer_size);
+
         session.read(flowfile, new InputStreamCallback() {
             @Override
             public void process(InputStream in) throws IOException {
                 try {
 
+                    // Skopiownie przychodzącego stringa
+                    //
                     String json = IOUtils.toString(in);
 
-                    // Object obj = new JSONParser().parse(json);
+                    // Parsowanie na JsonObject
+                    //
                     JsonObject parsedJson = (JsonObject) Jsoner.deserialize(json);
 
+                    // Odczytanie pól z JSONa
+                    //
                     String name = (String) parsedJson.get(prop_signal_desc_name);
-                    Boolean val = (Boolean) parsedJson.get(prop_signal_desc_val);
-                    BigDecimal time = (BigDecimal) parsedJson.get(prop_signal_desc_timestamp);
+                    // Boolean val = (Boolean) parsedJson.get(prop_signal_desc_val);
+                    // BigDecimal time = (BigDecimal) parsedJson.get(prop_signal_desc_timestamp);
 
-                    // Sprawdzamy czy zdefiniowano drugi parametr
-                    if (prop_second_signal_name != null && prop_second_signal_name != "") {
-                        // 2 parametry
-                        if (name.equals(prop_first_signal_name) && val == first_signal_val) {
-                            timestamp = time;
-                        }
-                        if (name.equals(prop_second_signal_name) && val == second_signal_val && timestamp != time
-                                && timestamp.compareTo(BigDecimal.ZERO) > 0 && time.compareTo(BigDecimal.ZERO) > 0) {
-                            BigDecimal outval = time.subtract(timestamp);
-                            if (outval.compareTo(BigDecimal.ZERO) > 0) {
+                    // Jeżeli są to interesujące nas sygnały to dodajemy do listy
+                    //
+                    if (name.equals(prop_first_signal_name) || name.equals(prop_second_signal_name)) {
+                        // Dodanie do tablicy
+                        //
+                        messagesJsonArray.add(parsedJson);
 
-                                final JsonObject newJson = new JsonObject();
+                        // Sortowanie
+                        //
+                        Collections.sort(messagesJsonArray, new Comparator<JsonObject>() {
+                            // You can change "Name" with "ID" if you want to sort by ID
+                            private final String KEY_NAME = prop_signal_desc_timestamp;
 
-                                if (prop_signal_desc_timediff_name != null && prop_signal_desc_timediff_name != "") {
-                                    newJson.put(prop_signal_desc_name, prop_signal_desc_timediff_name);
-                                } else {
-                                    newJson.put(prop_signal_desc_name,
-                                            prop_first_signal_name + "(" + prop_first_signal_val + "),"
-                                                    + prop_second_signal_name + "(" + prop_second_signal_val + ")");
-                                }
-
-                                newJson.put(prop_signal_desc_timestamp, time);
-
-                                if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
-                                    newJson.put(prop_signal_desc_timediff_val, outval);
-                                } else {
-                                    newJson.put(prop_signal_desc_val, outval);
-                                }
-
-                                String outstring = newJson.toJson();
-
-                                // String outstring = "Timediff " + prop_second_signal_name + "[" + time + "] -
-                                // "
-                                // + prop_first_signal_name + "[" + timestamp + "] = " + outval.toString();
-
-                                value.set(outstring);
+                            @Override
+                            public int compare(JsonObject a, JsonObject b) {
+                                BigDecimal time1 = (BigDecimal) a.get(KEY_NAME);
+                                BigDecimal time2 = (BigDecimal) b.get(KEY_NAME);
+                                return time2.compareTo(time1);
                             }
-                        }
-                    } else {
-                        // 1 parametr
-                        if (name.equals(prop_first_signal_name) && val == first_signal_val) {
-                            if (timestamp != time && timestamp.compareTo(BigDecimal.ZERO) > 0
-                                    && time.compareTo(BigDecimal.ZERO) > 0) {
-                                BigDecimal outval = time.subtract(timestamp);
-                                if (outval.compareTo(BigDecimal.ZERO) > 0) {
-                                    final JsonObject newJson = new JsonObject();
-                                    if (prop_signal_desc_timediff_name != null
-                                            && prop_signal_desc_timediff_name != "") {
-                                        newJson.put(prop_signal_desc_name, prop_signal_desc_timediff_name);
-                                    } else {
-                                        newJson.put(prop_signal_desc_name,
-                                                prop_first_signal_name + "(" + prop_first_signal_val + ")");
-                                    }
-                                    newJson.put(prop_signal_desc_timestamp, time);
-                                    if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
-                                        newJson.put(prop_signal_desc_timediff_val, outval);
-                                    } else {
-                                        newJson.put(prop_signal_desc_val, outval);
-                                    }
-                                    String outstring = newJson.toJson();
-                                    value.set(outstring);
-                                }
-                            }
-                            timestamp = time;
-                        }
+                        });
                     }
 
+                    // Sprawdzamy czy jest już wystarczająca ilośc elementów w tablicy
+                    //
+                    if (messagesJsonArray.size() > buffer_size) {
+
+                        JsonObject json1, json2;
+                        String name1, name2;
+                        Boolean val1, val2;
+                        BigDecimal time1, time2;
+                        Boolean found1, found2;
+                        found1 = false;
+                        found2 = false;
+                        time1 = new BigDecimal(0);
+                        time2 = new BigDecimal(0);
+                        json1 = new JsonObject();
+                        json2 = new JsonObject();
+
+                        // Sprawdzamy czy zdefiniowano drugi parametr
+                        // Odczytujemy dane z tablicy
+                        //
+                        if (prop_second_signal_name != null && prop_second_signal_name != "") {
+
+                            // 2 parametry
+                            //
+
+                            // Szukamy pierwszego w tablicy wystapienia sygnałów w tablicy
+                            //
+                            for (JsonObject tab : messagesJsonArray) {
+                                name1 = (String) tab.get(prop_signal_desc_name);
+                                val1 = (Boolean) tab.get(prop_signal_desc_val);
+                                time1 = (BigDecimal) tab.get(prop_signal_desc_timestamp);
+                                json1 = tab;
+                                if (name1.equals(prop_first_signal_name) && val1 == first_signal_val) {
+                                    found1 = true;
+                                    break;
+                                }
+                            }
+                            for (JsonObject tab : messagesJsonArray) {
+                                name2 = (String) tab.get(prop_signal_desc_name);
+                                val2 = (Boolean) tab.get(prop_signal_desc_val);
+                                time2 = (BigDecimal) tab.get(prop_signal_desc_timestamp);
+                                json2 = tab;
+                                if (name2.equals(prop_second_signal_name) && val2 == second_signal_val) {
+                                    found2 = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            // 1 parametr
+                            //
+
+                            // Pierwsza wartość
+                            //
+                            name1 = (String) messagesJsonArray.get(0).get(prop_signal_desc_name);
+                            val1 = (Boolean) messagesJsonArray.get(0).get(prop_signal_desc_val);
+                            time1 = (BigDecimal) messagesJsonArray.get(0).get(prop_signal_desc_timestamp);
+                            json1 = messagesJsonArray.get(0);
+                            found1 = true;
+
+                            // Druga wartość
+                            //
+                            name2 = (String) messagesJsonArray.get(1).get(prop_signal_desc_name);
+                            val2 = (Boolean) messagesJsonArray.get(1).get(prop_signal_desc_val);
+                            time2 = (BigDecimal) messagesJsonArray.get(1).get(prop_signal_desc_timestamp);
+                            json2 = messagesJsonArray.get(1);
+                            found2 = true;
+                        }
+
+                        // Sprawdzamy czy znaleziono te dwa wpisy i czy wartości są większe od zera
+                        //
+                        if (found1 && found2 && time1.compareTo(BigDecimal.ZERO) > 0
+                                && time2.compareTo(BigDecimal.ZERO) > 0) {
+
+                            // Obliczamy różnicę
+                            //
+                            BigDecimal outval = time2.subtract(time1);
+
+                            // Tworzymy nowego JSONa
+                            //
+                            final JsonObject newJson = new JsonObject();
+
+                            // Dodajemy pola do JSONa
+                            if (prop_signal_desc_timediff_name != null && prop_signal_desc_timediff_name != "") {
+                                newJson.put(prop_signal_desc_name, prop_signal_desc_timediff_name);
+                            } else {
+                                newJson.put(prop_signal_desc_name, prop_first_signal_name + "(" + prop_first_signal_val
+                                        + ")," + prop_second_signal_name + "(" + prop_second_signal_val + ")");
+                            }
+
+                            // Dodajemy obliczoną wartość
+                            //
+                            newJson.put(prop_signal_desc_timestamp, time1);
+                            if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
+                                newJson.put(prop_signal_desc_timediff_val, outval);
+                            } else {
+                                newJson.put(prop_signal_desc_val, outval);
+                            }
+
+                            // Przekształcamy JSONa na Stringa
+                            //
+                            String outstring = newJson.toJson();
+
+                            outstring += "\n";
+                            for (JsonObject tab : messagesJsonArray) {
+                                outstring += "[" + tab.toJson() + "]\n";
+                            }
+                            outstring += "\n";
+
+                            // Zapisujemy do AtomicReference
+                            value.set(outstring);
+
+                            // Usunięcie użytych JSONów
+                            messagesJsonArray.remove(json1);
+                            messagesJsonArray.remove(json2);
+                        }
+                    }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     getLogger().error("Failed to read json string. " + ex.toString());
@@ -258,6 +345,8 @@ public class TimediffProcessor extends AbstractProcessor {
             }
         });
 
+        // Wysłanie wyniku do odpowiedniego endpointu
+        //
         String results = value.get();
         if (results != null && !results.isEmpty()) {
 
@@ -276,7 +365,9 @@ public class TimediffProcessor extends AbstractProcessor {
             });
 
             session.transfer(flowfile, SUCCESS);
-        } else {
+        } else
+
+        {
             session.transfer(flowfile, FAILURE);
         }
 
