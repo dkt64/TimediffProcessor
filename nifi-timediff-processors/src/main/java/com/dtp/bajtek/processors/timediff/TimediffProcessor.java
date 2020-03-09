@@ -99,8 +99,9 @@ public class TimediffProcessor extends AbstractProcessor {
             .build();
 
     public static final PropertyDescriptor Buffer_size = new PropertyDescriptor.Builder().name("buffer_size")
-            .displayName("Buffer size").description("Buffer size").required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).expressionLanguageSupported(false).build();
+            .displayName("Buffer size").description("Buffer size").required(true)
+            .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).expressionLanguageSupported(false)
+            .defaultValue("5").build();
 
     public static final Relationship SUCCESS = new Relationship.Builder().name("success")
             .description("New flowfile in form of String with found/calculated time difference").build();
@@ -315,7 +316,7 @@ public class TimediffProcessor extends AbstractProcessor {
 
                             // Dodajemy obliczoną wartość
                             //
-                            newJson.put(prop_signal_desc_timestamp, time1);
+                            newJson.put(prop_signal_desc_timestamp, time2);
                             if (prop_signal_desc_timediff_val != null && prop_signal_desc_timediff_val != "") {
                                 newJson.put(prop_signal_desc_timediff_val, outval);
                             } else {
@@ -326,11 +327,13 @@ public class TimediffProcessor extends AbstractProcessor {
                             //
                             String outstring = newJson.toJson();
 
-                            outstring += "\n";
-                            for (JsonObject tab : messagesJsonArray) {
-                                outstring += "[" + tab.toJson() + "]\n";
-                            }
-                            outstring += "\n";
+                            // // TEST
+                            // // pokazanie całej tablicy
+                            // outstring += "\n";
+                            // for (JsonObject tab : messagesJsonArray) {
+                            //     outstring += "[" + tab.toJson() + "]\n";
+                            // }
+                            // outstring += "\n";
 
                             // Zapisujemy do AtomicReference
                             value.set(outstring);
@@ -342,11 +345,12 @@ public class TimediffProcessor extends AbstractProcessor {
                         }
                     }
 
-                    // Zabezpieczenie - sprawdzamy czy bufor nie jest za duży
+                    // Zabezpieczenie - jeżeli mamy dwa razy tyle elementów w tablicy to ją czyścimy
+                    // aż do osiągnięcia zadanej ilości
                     //
                     while (messagesJsonArray.size() > buffer_size * 2) {
-                        // Usunięcie użytych JSONów
-                        messagesJsonArray.remove(0);
+                        // Wyczyszczenie tablicy
+                        messagesJsonArray.clear();
                     }
 
                 } catch (Exception ex) {
