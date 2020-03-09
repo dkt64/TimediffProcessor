@@ -220,7 +220,7 @@ public class TimediffProcessor extends AbstractProcessor {
                             public int compare(JsonObject a, JsonObject b) {
                                 BigDecimal time1 = (BigDecimal) a.get(KEY_NAME);
                                 BigDecimal time2 = (BigDecimal) b.get(KEY_NAME);
-                                return time2.compareTo(time1);
+                                return time1.compareTo(time2);
                             }
                         });
                     }
@@ -229,7 +229,7 @@ public class TimediffProcessor extends AbstractProcessor {
                     //
                     if (messagesJsonArray.size() > buffer_size) {
 
-                        JsonObject json1, json2;
+                        // JsonObject json1, json2;
                         String name1, name2;
                         Boolean val1, val2;
                         BigDecimal time1, time2;
@@ -238,8 +238,8 @@ public class TimediffProcessor extends AbstractProcessor {
                         found2 = false;
                         time1 = new BigDecimal(0);
                         time2 = new BigDecimal(0);
-                        json1 = new JsonObject();
-                        json2 = new JsonObject();
+                        JsonObject json1 = new JsonObject();
+                        JsonObject json2 = new JsonObject();
 
                         // Sprawdzamy czy zdefiniowano drugi parametr
                         // Odczytujemy dane z tablicy
@@ -338,8 +338,17 @@ public class TimediffProcessor extends AbstractProcessor {
                             // Usunięcie użytych JSONów
                             messagesJsonArray.remove(json1);
                             messagesJsonArray.remove(json2);
+
                         }
                     }
+
+                    // Zabezpieczenie - sprawdzamy czy bufor nie jest za duży
+                    //
+                    while (messagesJsonArray.size() > buffer_size * 2) {
+                        // Usunięcie użytych JSONów
+                        messagesJsonArray.remove(0);
+                    }
+
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     getLogger().error("Failed to read json string. " + ex.toString());
