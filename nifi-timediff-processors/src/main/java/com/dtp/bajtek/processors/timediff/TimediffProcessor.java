@@ -327,6 +327,8 @@ public class TimediffProcessor extends AbstractProcessor {
                             //
                             String outstring = newJson.toJson();
 
+                            outstring += "\n";
+
                             // // TEST
                             // // pokazanie całej tablicy
                             // outstring += "\n";

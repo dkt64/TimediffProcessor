@@ -1,0 +1,1 @@
+c:\tools\pscp -i %USERPROFILE%\.ssh\pi.ppk -r -v ./nifi-timediff-nar/target/nifi-timediff-nar-1.3.nar pi@pi1:/opt/nifi/extensions
