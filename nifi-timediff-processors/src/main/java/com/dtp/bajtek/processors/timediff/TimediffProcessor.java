@@ -107,6 +107,8 @@ public class TimediffProcessor extends AbstractProcessor {
             .description("New flowfile in form of String with found/calculated time difference").build();
     public static final Relationship FAILURE = new Relationship.Builder().name("failure")
             .description("Original flowfile").build();
+    public static final Relationship FILTERED = new Relationship.Builder().name("filtered")
+            .description("Filtered by name and value flowfiles").build();
 
     private List<PropertyDescriptor> descriptors;
 
@@ -132,6 +134,7 @@ public class TimediffProcessor extends AbstractProcessor {
         final Set<Relationship> relationships = new HashSet<Relationship>();
         relationships.add(SUCCESS);
         relationships.add(FAILURE);
+        relationships.add(FILTERED);
         this.relationships = Collections.unmodifiableSet(relationships);
     }
 
@@ -183,6 +186,9 @@ public class TimediffProcessor extends AbstractProcessor {
         String prop_buffer_size = context.getProperty(Buffer_size).getValue();
         Integer buffer_size = Integer.parseInt(prop_buffer_size);
 
+        final AtomicReference<Boolean> message_found = new AtomicReference<>();
+        message_found.set(false);
+
         session.read(flowfile, new InputStreamCallback() {
             @Override
             public void process(InputStream in) throws IOException {
@@ -210,25 +216,32 @@ public class TimediffProcessor extends AbstractProcessor {
                         // Dodanie do tablicy
                         //
                         messagesJsonArray.add(parsedJson);
+                        message_found.set(true);
 
                         // Sortowanie
                         //
-                        Collections.sort(messagesJsonArray, new Comparator<JsonObject>() {
-                            // You can change "Name" with "ID" if you want to sort by ID
-                            private final String KEY_NAME = prop_signal_desc_timestamp;
+                        if (messagesJsonArray.size() > 1) {
+                            Collections.sort(messagesJsonArray, new Comparator<JsonObject>() {
+                                // You can change "Name" with "ID" if you want to sort by ID
+                                private final String KEY_NAME = prop_signal_desc_timestamp;
 
-                            @Override
-                            public int compare(JsonObject a, JsonObject b) {
-                                BigDecimal time1 = (BigDecimal) a.get(KEY_NAME);
-                                BigDecimal time2 = (BigDecimal) b.get(KEY_NAME);
-                                return time1.compareTo(time2);
-                            }
-                        });
+                                @Override
+                                public int compare(JsonObject a, JsonObject b) {
+                                    BigDecimal t1 = (BigDecimal) a.get(KEY_NAME);
+                                    BigDecimal t2 = (BigDecimal) b.get(KEY_NAME);
+                                    if (t1.compareTo(BigDecimal.ZERO) > 0 && t2.compareTo(BigDecimal.ZERO) > 0) {
+                                        return t2.compareTo(t1);
+                                    } else {
+                                        return 0;
+                                    }
+                                }
+                            });
+                        }
                     }
 
                     // Sprawdzamy czy jest już wystarczająca ilośc elementów w tablicy
                     //
-                    if (messagesJsonArray.size() > buffer_size) {
+                    if (messagesJsonArray.size() >= buffer_size) {
 
                         // JsonObject json1, json2;
                         String name1, name2;
@@ -252,26 +265,34 @@ public class TimediffProcessor extends AbstractProcessor {
 
                             // Szukamy pierwszego w tablicy wystapienia sygnałów w tablicy
                             //
-                            for (JsonObject tab : messagesJsonArray) {
-                                name1 = (String) tab.get(prop_signal_desc_name);
-                                val1 = (Boolean) tab.get(prop_signal_desc_val);
-                                time1 = (BigDecimal) tab.get(prop_signal_desc_timestamp);
-                                json1 = tab;
+                            // for (JsonObject tab : messagesJsonArray) {
+                            for (int i = 0; i < messagesJsonArray.size() - 1; i++) {
+                                JsonObject obj1 = messagesJsonArray.get(i);
+                                name1 = (String) obj1.get(prop_signal_desc_name);
+                                val1 = (Boolean) obj1.get(prop_signal_desc_val);
                                 if (name1.equals(prop_first_signal_name) && val1 == first_signal_val) {
                                     found1 = true;
-                                    break;
+                                    json1 = obj1;
+                                    JsonObject obj2 = messagesJsonArray.get(i + 1);
+                                    name2 = (String) obj2.get(prop_signal_desc_name);
+                                    val2 = (Boolean) obj2.get(prop_signal_desc_val);
+                                    if (name2.equals(prop_second_signal_name) && val2 == second_signal_val) {
+                                        found2 = true;
+                                        json2 = obj2;
+                                        break;
+                                    }
                                 }
                             }
-                            for (JsonObject tab : messagesJsonArray) {
-                                name2 = (String) tab.get(prop_signal_desc_name);
-                                val2 = (Boolean) tab.get(prop_signal_desc_val);
-                                time2 = (BigDecimal) tab.get(prop_signal_desc_timestamp);
-                                json2 = tab;
-                                if (name2.equals(prop_second_signal_name) && val2 == second_signal_val) {
-                                    found2 = true;
-                                    break;
-                                }
-                            }
+                            // for (JsonObject tab : messagesJsonArray) {
+                            // name2 = (String) tab.get(prop_signal_desc_name);
+                            // val2 = (Boolean) tab.get(prop_signal_desc_val);
+                            // time2 = (BigDecimal) tab.get(prop_signal_desc_timestamp);
+                            // json2 = tab;
+                            // if (name2.equals(prop_second_signal_name) && val2 == second_signal_val) {
+                            // found2 = true;
+                            // break;
+                            // }
+                            // }
                         } else {
                             // 1 parametr
                             //
@@ -327,13 +348,13 @@ public class TimediffProcessor extends AbstractProcessor {
                             //
                             String outstring = newJson.toJson();
 
-                            outstring += "\n";
+                            outstring += "\n"; // dodajemy znak końca linii (dla sparka)
 
                             // // TEST
                             // // pokazanie całej tablicy
                             // outstring += "\n";
                             // for (JsonObject tab : messagesJsonArray) {
-                            //     outstring += "[" + tab.toJson() + "]\n";
+                            // outstring += "[" + tab.toJson() + "]\n";
                             // }
                             // outstring += "\n";
 
@@ -348,9 +369,8 @@ public class TimediffProcessor extends AbstractProcessor {
                     }
 
                     // Zabezpieczenie - jeżeli mamy dwa razy tyle elementów w tablicy to ją czyścimy
-                    // aż do osiągnięcia zadanej ilości
                     //
-                    while (messagesJsonArray.size() > buffer_size * 2) {
+                    if (messagesJsonArray.size() > buffer_size * 2) {
                         // Wyczyszczenie tablicy
                         messagesJsonArray.clear();
                     }
@@ -365,6 +385,8 @@ public class TimediffProcessor extends AbstractProcessor {
         // Wysłanie wyniku do odpowiedniego endpointu
         //
         String results = value.get();
+        Boolean results2 = message_found.get();
+
         if (results != null && !results.isEmpty()) {
 
             // // Write the results to an attribute
@@ -382,9 +404,9 @@ public class TimediffProcessor extends AbstractProcessor {
             });
 
             session.transfer(flowfile, SUCCESS);
-        } else
-
-        {
+        } else if (results2) {
+            session.transfer(flowfile, FILTERED);
+        } else {
             session.transfer(flowfile, FAILURE);
         }
 
