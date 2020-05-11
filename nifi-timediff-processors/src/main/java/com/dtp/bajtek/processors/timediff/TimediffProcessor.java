@@ -230,7 +230,7 @@ public class TimediffProcessor extends AbstractProcessor {
                                     BigDecimal t1 = (BigDecimal) a.get(KEY_NAME);
                                     BigDecimal t2 = (BigDecimal) b.get(KEY_NAME);
                                     if (t1.compareTo(BigDecimal.ZERO) > 0 && t2.compareTo(BigDecimal.ZERO) > 0) {
-                                        return t2.compareTo(t1);
+                                        return t1.compareTo(t2);
                                     } else {
                                         return 0;
                                     }
@@ -244,12 +244,10 @@ public class TimediffProcessor extends AbstractProcessor {
                     if (messagesJsonArray.size() >= buffer_size) {
 
                         // JsonObject json1, json2;
-                        String name1, name2;
-                        Boolean val1, val2;
-                        BigDecimal time1, time2;
                         Boolean found1, found2;
                         found1 = false;
                         found2 = false;
+                        BigDecimal time1, time2;
                         time1 = new BigDecimal(0);
                         time2 = new BigDecimal(0);
                         JsonObject json1 = new JsonObject();
@@ -268,14 +266,18 @@ public class TimediffProcessor extends AbstractProcessor {
                             // for (JsonObject tab : messagesJsonArray) {
                             for (int i = 0; i < messagesJsonArray.size() - 1; i++) {
                                 JsonObject obj1 = messagesJsonArray.get(i);
+                                String name1, name2;
+                                Boolean val1, val2;
                                 name1 = (String) obj1.get(prop_signal_desc_name);
                                 val1 = (Boolean) obj1.get(prop_signal_desc_val);
+                                time1 = (BigDecimal) obj1.get(prop_signal_desc_timestamp);
                                 if (name1.equals(prop_first_signal_name) && val1 == first_signal_val) {
                                     found1 = true;
                                     json1 = obj1;
                                     JsonObject obj2 = messagesJsonArray.get(i + 1);
                                     name2 = (String) obj2.get(prop_signal_desc_name);
                                     val2 = (Boolean) obj2.get(prop_signal_desc_val);
+                                    time2 = (BigDecimal) obj2.get(prop_signal_desc_timestamp);
                                     if (name2.equals(prop_second_signal_name) && val2 == second_signal_val) {
                                         found2 = true;
                                         json2 = obj2;
@@ -297,18 +299,21 @@ public class TimediffProcessor extends AbstractProcessor {
                             // 1 parametr
                             //
 
+                            // String name1, name2;
+                            // Boolean val1, val2;
+
                             // Pierwsza wartość
                             //
-                            name1 = (String) messagesJsonArray.get(0).get(prop_signal_desc_name);
-                            val1 = (Boolean) messagesJsonArray.get(0).get(prop_signal_desc_val);
+                            // name1 = (String) messagesJsonArray.get(0).get(prop_signal_desc_name);
+                            // val1 = (Boolean) messagesJsonArray.get(0).get(prop_signal_desc_val);
                             time1 = (BigDecimal) messagesJsonArray.get(0).get(prop_signal_desc_timestamp);
                             json1 = messagesJsonArray.get(0);
                             found1 = true;
 
                             // Druga wartość
                             //
-                            name2 = (String) messagesJsonArray.get(1).get(prop_signal_desc_name);
-                            val2 = (Boolean) messagesJsonArray.get(1).get(prop_signal_desc_val);
+                            // name2 = (String) messagesJsonArray.get(1).get(prop_signal_desc_name);
+                            // val2 = (Boolean) messagesJsonArray.get(1).get(prop_signal_desc_val);
                             time2 = (BigDecimal) messagesJsonArray.get(1).get(prop_signal_desc_timestamp);
                             json2 = messagesJsonArray.get(1);
                             found2 = true;
